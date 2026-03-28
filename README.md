@@ -50,3 +50,22 @@ The scheduler now includes smarter planning features:
 - **Filter** tasks using constraints and preferences to keep schedules practical.
 - **Detect conflicts** when tasks overlap or exceed available time.
 - **Handle recurring tasks** so repeat routines are automatically included.
+
+## Testing PawPal+
+
+Run the full test suite with:
+
+```bash
+python -m pytest
+```
+
+Current tests cover core scheduler reliability areas, including:
+
+- Sorting correctness (chronological ordering of scheduled tasks)
+- Recurrence logic (daily/weekly tasks creating next occurrences)
+- Conflict detection (duplicate-time warnings across same/different pets)
+- Edge cases (midnight/noon ordering, invalid/missing times, non-recurring tasks)
+
+**Confidence Level:** ★★★★★ (5/5)
+
+Based on the latest test run (`python -m pytest`), all tests passed.

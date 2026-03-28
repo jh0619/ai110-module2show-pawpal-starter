@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 
 @dataclass
@@ -112,6 +113,30 @@ class Task:
     frequency: str = ""
     is_completed: bool = False
 
+    @staticmethod
+    def _shift_time_for_recurrence(time_value: str, frequency: str) -> str:
+        """Return shifted time string when recurrence has a parseable date."""
+        if not time_value:
+            return time_value
+
+        normalized_frequency = frequency.strip().lower()
+        day_delta = 1 if normalized_frequency == "daily" else 7
+
+        supported_formats = [
+            "%Y-%m-%d %I:%M %p",
+            "%Y-%m-%d %H:%M",
+        ]
+
+        for fmt in supported_formats:
+            try:
+                parsed_time = datetime.strptime(time_value, fmt)
+                shifted_time = parsed_time + timedelta(days=day_delta)
+                return shifted_time.strftime(fmt)
+            except ValueError:
+                continue
+
+        return time_value
+
     def _create_next_occurrence(self) -> Task | None:
         """Create the next task occurrence for recurring tasks."""
         recurring_frequencies = {"daily", "weekly"}
@@ -124,7 +149,7 @@ class Task:
             priority=self.priority,
             category=self.category,
             description=self.description,
-            time=self.time,
+            time=self._shift_time_for_recurrence(self.time, self.frequency),
             frequency=self.frequency,
             is_completed=False,
         )
@@ -328,7 +353,11 @@ class Scheduler:
 
     def get_plan_by_time(self) -> list[Task]:
         """Return the generated plan sorted chronologically by time."""
+        def sort_key(task: Task) -> int:
+            minutes = self._time_to_minutes(task.time)
+            return minutes if minutes is not None else 10_000
+
         return sorted(
             self.generated_plan,
-            key=lambda task: self._time_to_minutes(task.time) or 10_000,
+            key=sort_key,
         )
