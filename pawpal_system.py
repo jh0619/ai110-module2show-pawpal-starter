@@ -82,6 +82,10 @@ class Task:
         """Mark the task as completed."""
         self.is_completed = True
 
+    def mark_complete(self) -> None:
+        """Mark the task as complete by changing its status."""
+        self.is_completed = True
+
     def update_task(
         self,
         title: str,
