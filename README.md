@@ -41,3 +41,12 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+## Smarter Scheduling
+
+The scheduler now includes smarter planning features:
+
+- **Sort** tasks by priority and timing so critical care items are planned first.
+- **Filter** tasks using constraints and preferences to keep schedules practical.
+- **Detect conflicts** when tasks overlap or exceed available time.
+- **Handle recurring tasks** so repeat routines are automatically included.

@@ -68,7 +68,7 @@ def main():
         priority="high",
         category="feeding",
         description="Prepare wet food and refill water bowl",
-        time="7:00 AM",
+        time="8:00 AM",
         frequency="twice daily"
     )
 
@@ -115,10 +115,44 @@ def main():
     print("-" * 60)
     print(scheduler.explain_plan())
 
+    print("🔎 FILTERED TASKS (Max + Pending):")
+    print("-" * 60)
+    filtered_tasks = owner.filter_tasks(
+        is_completed=False,
+        pet_name="Max",
+    )
+    for task in filtered_tasks:
+        print(f"- {task.title} at {task.time} [{task.priority}]")
+    print()
+
+    conflict_warnings = scheduler.detect_time_conflicts(
+        tasks=scheduler.tasks,
+        task_pet_map=owner.get_task_pet_map(),
+    )
+    if conflict_warnings:
+        print("⚠️ SCHEDULE WARNINGS:")
+        print("-" * 60)
+        for warning in conflict_warnings:
+            print(warning)
+        print()
+
     print("📝 DETAILED TASK LIST:")
     print("-" * 60)
     for i, task in enumerate(scheduler.get_plan_by_time(), 1):
         print(f"\n{i}. {task.get_task_info()}")
+
+    print("♻️ RECURRING TASK HANDLING:")
+    print("-" * 60)
+    next_task = scheduler.mark_task_complete(task1)
+    print(f"Completed: {task1.title} (status={task1.is_completed})")
+    if next_task is not None:
+        print(
+            "Next occurrence created: "
+            f"{next_task.title} at {next_task.time} "
+            f"(frequency={next_task.frequency})"
+        )
+    else:
+        print("No next occurrence created.")
 
     print("=" * 60 + "\n")
 

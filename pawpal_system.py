@@ -66,6 +66,40 @@ class Owner:
             all_tasks.extend(pet.tasks)
         return all_tasks
 
+    def get_task_pet_map(self) -> dict[int, str]:
+        """Return a mapping of task object IDs to pet names."""
+        task_pet_map: dict[int, str] = {}
+        for pet in self.pets:
+            for task in pet.tasks:
+                task_pet_map[id(task)] = pet.name
+        return task_pet_map
+
+    def filter_tasks(
+        self,
+        is_completed: bool | None = None,
+        pet_name: str | None = None,
+    ) -> list[Task]:
+        """Filter tasks by completion status and/or pet name.
+
+        If no filter is provided, all tasks are returned.
+        """
+        filtered_tasks: list[Task] = []
+        normalized_pet_name = pet_name.strip().lower() if pet_name else None
+
+        for pet in self.pets:
+            if normalized_pet_name and pet.name.lower() != normalized_pet_name:
+                continue
+
+            for task in pet.tasks:
+                if (
+                    is_completed is not None
+                    and task.is_completed != is_completed
+                ):
+                    continue
+                filtered_tasks.append(task)
+
+        return filtered_tasks
+
 
 @dataclass
 class Task:
@@ -78,13 +112,27 @@ class Task:
     frequency: str = ""
     is_completed: bool = False
 
-    def mark_completed(self) -> None:
-        """Mark the task as completed."""
-        self.is_completed = True
+    def _create_next_occurrence(self) -> Task | None:
+        """Create the next task occurrence for recurring tasks."""
+        recurring_frequencies = {"daily", "weekly"}
+        if self.frequency.strip().lower() not in recurring_frequencies:
+            return None
 
-    def mark_complete(self) -> None:
-        """Mark the task as complete by changing its status."""
+        return Task(
+            title=self.title,
+            duration=self.duration,
+            priority=self.priority,
+            category=self.category,
+            description=self.description,
+            time=self.time,
+            frequency=self.frequency,
+            is_completed=False,
+        )
+
+    def mark_complete(self) -> Task | None:
+        """Mark task complete and return next occurrence if recurring."""
         self.is_completed = True
+        return self._create_next_occurrence()
 
     def update_task(
         self,
@@ -132,6 +180,98 @@ class Scheduler:
         """Remove a task from the scheduler."""
         if task in self.tasks:
             self.tasks.remove(task)
+
+    def mark_task_complete(self, task: Task) -> Task | None:
+        """Complete a task and auto-add the next recurring occurrence."""
+        next_task = task.mark_complete()
+        if next_task is not None:
+            self.tasks.append(next_task)
+        return next_task
+
+    @staticmethod
+    def _time_to_minutes(time_str: str) -> int | None:
+        """Convert a time string (e.g., '8:00 AM') to minutes."""
+        if not time_str:
+            return None
+
+        try:
+            parts = time_str.split()
+            time_parts = parts[0].split(':')
+            hour = int(time_parts[0])
+            minute = int(time_parts[1])
+            period = parts[1].upper() if len(parts) > 1 else "AM"
+
+            if period == "PM" and hour != 12:
+                hour += 12
+            elif period == "AM" and hour == 12:
+                hour = 0
+
+            return hour * 60 + minute
+        except (ValueError, IndexError):
+            return None
+
+    def detect_time_conflicts(
+        self,
+        tasks: list[Task] | None = None,
+        task_pet_map: dict[int, str] | None = None,
+    ) -> list[str]:
+        """Detect same-time task conflicts and return warning messages.
+
+        This method is intentionally lightweight: it never raises for bad input
+        and returns human-readable warnings instead.
+        """
+        warnings: list[str] = []
+        tasks_to_check = tasks or self.generated_plan or self.tasks
+        grouped_tasks: dict[int, list[Task]] = {}
+
+        for task in tasks_to_check:
+            minutes = self._time_to_minutes(task.time)
+            if minutes is None:
+                if task.time:
+                    warnings.append(
+                        "Warning: Skipped invalid task time "
+                        f"'{task.time}' for '{task.title}'."
+                    )
+                continue
+
+            grouped_tasks.setdefault(minutes, []).append(task)
+
+        for conflicted_tasks in grouped_tasks.values():
+            if len(conflicted_tasks) < 2:
+                continue
+
+            time_label = conflicted_tasks[0].time
+
+            if task_pet_map:
+                pet_names = [
+                    task_pet_map.get(id(task), "Unknown Pet")
+                    for task in conflicted_tasks
+                ]
+                conflict_scope = (
+                    "same pet"
+                    if len(set(pet_names)) == 1
+                    else "different pets"
+                )
+                details = ", ".join(
+                    (
+                        f"{task.title} "
+                        f"({task_pet_map.get(id(task), 'Unknown Pet')})"
+                    )
+                    for task in conflicted_tasks
+                )
+                warnings.append(
+                    f"Warning: Time conflict at {time_label} "
+                    f"({conflict_scope}): {details}."
+                )
+            else:
+                task_titles = ", ".join(
+                    task.title for task in conflicted_tasks
+                )
+                warnings.append(
+                    f"Warning: Time conflict at {time_label}: {task_titles}."
+                )
+
+        return warnings
 
     def generate_plan(
         self,
@@ -188,24 +328,7 @@ class Scheduler:
 
     def get_plan_by_time(self) -> list[Task]:
         """Return the generated plan sorted chronologically by time."""
-        def time_to_minutes(time_str: str) -> int:
-            """Convert time string (e.g., '8:00 AM') to minutes since midnight."""
-            if not time_str:
-                return 0
-            try:
-                parts = time_str.split()
-                time_parts = parts[0].split(':')
-                hour = int(time_parts[0])
-                minute = int(time_parts[1])
-                period = parts[1].upper() if len(parts) > 1 else "AM"
-
-                if period == "PM" and hour != 12:
-                    hour += 12
-                elif period == "AM" and hour == 12:
-                    hour = 0
-
-                return hour * 60 + minute
-            except (ValueError, IndexError):
-                return 0
-
-        return sorted(self.generated_plan, key=lambda t: time_to_minutes(t.time))
+        return sorted(
+            self.generated_plan,
+            key=lambda task: self._time_to_minutes(task.time) or 10_000,
+        )

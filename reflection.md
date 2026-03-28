@@ -38,10 +38,18 @@ Overall, these changes improved alignment between UML and code structure and set
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
 - How did you decide which constraints mattered most?
 
+My scheduler currently considers three main inputs: **available time**, **task priority**, and **task completion status** (it only schedules incomplete tasks). It sorts tasks by priority (`high` → `medium` → `low`), then by shorter duration, and adds tasks only if they fit within the owner’s available minutes.
+
+I decided these constraints mattered most because they directly affect whether a schedule is practical for daily use. Time is the hard limit, so it is enforced first through fit checks. Priority comes next so essential care tasks are selected before optional ones. Preferences are included in the method signature and UI flow, but in this version they are a secondary design placeholder rather than a strict decision rule; I prioritized building a reliable baseline scheduler first.
+
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
+
+One tradeoff my scheduler makes is using a simple greedy strategy: it sorts tasks by priority and duration, then picks tasks in that order until time runs out. This is fast and easy to explain, but it does not always produce the mathematically optimal combination of tasks.
+
+I think this is reasonable for the PawPal+ scenario because the app is meant for practical daily planning, not perfect optimization. A caregiver usually needs a clear, predictable plan they can trust quickly. The greedy approach gives stable results, keeps runtime low, and makes the scheduling behavior transparent to users. In future iterations, I could add a more advanced optimizer if the project needs stronger optimization guarantees.
 
 ---
 
