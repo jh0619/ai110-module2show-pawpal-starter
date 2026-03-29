@@ -1,0 +1,60 @@
+classDiagram
+	class Pet {
+		String name
+		String species
+		int age
+		String notes
+		List~Task~ tasks
+		get_profile() String
+		update_info(name, species, age, notes) void
+	}
+
+	class Owner {
+		String name
+		int available_time
+		List~String~ preferences
+		List~Pet~ pets
+		update_availability(available_time) void
+		set_preferences(preferences) void
+		add_pet(pet) void
+		remove_pet(pet) void
+		get_all_tasks() List~Task~
+		get_task_pet_map() Dict~int,String~
+		filter_tasks(is_completed, pet_name) List~Task~
+	}
+
+	class Task {
+		String title
+		int duration
+		String priority
+		String category
+		String description
+		String time
+		String frequency
+		bool is_completed
+		_shift_time_for_recurrence(time_value, frequency)$ String
+		_create_next_occurrence() Optional~Task~
+		mark_complete() Optional~Task~
+		update_task(title, duration, priority, category, description, time, frequency) void
+		get_task_info() String
+	}
+
+	class Scheduler {
+		List~Task~ tasks
+		int available_time
+		List~Task~ generated_plan
+		add_task(task) void
+		remove_task(task) void
+		mark_task_complete(task) Optional~Task~
+		_time_to_minutes(time_str)$ int
+		detect_time_conflicts(tasks, task_pet_map) List~String~
+		generate_plan(available_time, preferences) List~Task~
+		explain_plan() String
+		get_plan() List~Task~
+		get_plan_by_time() List~Task~
+	}
+
+	Owner --> Pet : owns
+	Pet --> Task : has
+	Owner ..> Task : collects/filters
+	Scheduler --> Task : schedules

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 
 @dataclass
@@ -219,6 +219,10 @@ class Scheduler:
         if not time_str:
             return None
 
+        parsed_datetime = Scheduler._parse_task_datetime(time_str)
+        if parsed_datetime is not None:
+            return (parsed_datetime.hour * 60) + parsed_datetime.minute
+
         try:
             parts = time_str.split()
             time_parts = parts[0].split(':')
@@ -235,6 +239,58 @@ class Scheduler:
         except (ValueError, IndexError):
             return None
 
+    @staticmethod
+    def _parse_task_datetime(time_str: str) -> datetime | None:
+        """Parse supported task time formats into a datetime object."""
+        if not time_str:
+            return None
+
+        supported_formats = [
+            "%Y-%m-%d %I:%M %p",
+            "%Y-%m-%d %H:%M",
+            "%I:%M %p",
+            "%H:%M",
+        ]
+
+        for fmt in supported_formats:
+            try:
+                return datetime.strptime(time_str, fmt)
+            except ValueError:
+                continue
+
+        return None
+
+    @staticmethod
+    def _time_sort_key(time_str: str) -> tuple[int, int] | None:
+        """Return sortable (day, minutes) key for task times."""
+        parsed_datetime = Scheduler._parse_task_datetime(time_str)
+        if parsed_datetime is None:
+            return None
+
+        has_explicit_date = "-" in time_str
+        day_key = parsed_datetime.toordinal() if has_explicit_date else 0
+        minutes = (parsed_datetime.hour * 60) + parsed_datetime.minute
+        return (day_key, minutes)
+
+    @staticmethod
+    def _extract_explicit_task_date(time_str: str) -> date | None:
+        """Return date when task time includes an explicit YYYY-MM-DD value."""
+        if not time_str or "-" not in time_str:
+            return None
+
+        supported_formats = [
+            "%Y-%m-%d %I:%M %p",
+            "%Y-%m-%d %H:%M",
+        ]
+
+        for fmt in supported_formats:
+            try:
+                return datetime.strptime(time_str, fmt).date()
+            except ValueError:
+                continue
+
+        return None
+
     def detect_time_conflicts(
         self,
         tasks: list[Task] | None = None,
@@ -247,11 +303,11 @@ class Scheduler:
         """
         warnings: list[str] = []
         tasks_to_check = tasks or self.generated_plan or self.tasks
-        grouped_tasks: dict[int, list[Task]] = {}
+        grouped_tasks: dict[tuple[int, int], list[Task]] = {}
 
         for task in tasks_to_check:
-            minutes = self._time_to_minutes(task.time)
-            if minutes is None:
+            sort_key = self._time_sort_key(task.time)
+            if sort_key is None:
                 if task.time:
                     warnings.append(
                         "Warning: Skipped invalid task time "
@@ -259,7 +315,7 @@ class Scheduler:
                     )
                 continue
 
-            grouped_tasks.setdefault(minutes, []).append(task)
+            grouped_tasks.setdefault(sort_key, []).append(task)
 
         for conflicted_tasks in grouped_tasks.values():
             if len(conflicted_tasks) < 2:
@@ -302,6 +358,7 @@ class Scheduler:
         self,
         available_time: int,
         preferences: list[str],
+        plan_date: date | None = None,
     ) -> list[Task]:
         """Generate an optimized plan based on available time and preferences.
 
@@ -310,8 +367,19 @@ class Scheduler:
         """
         self.available_time = available_time
 
-        # Filter incomplete tasks
-        incomplete_tasks = [t for t in self.tasks if not t.is_completed]
+        # Filter incomplete tasks for the selected day.
+        incomplete_tasks: list[Task] = []
+        for task in self.tasks:
+            if task.is_completed:
+                continue
+
+            if plan_date is None:
+                incomplete_tasks.append(task)
+                continue
+
+            task_date = self._extract_explicit_task_date(task.time)
+            if task_date is None or task_date == plan_date:
+                incomplete_tasks.append(task)
 
         # Sort by priority and duration
         priority_order = {"high": 1, "medium": 2, "low": 3}
@@ -330,7 +398,7 @@ class Scheduler:
 
         return self.generated_plan
 
-    def explain_plan(self) -> str:
+    def explain_plan(self, task_pet_map: dict[int, str] | None = None) -> str:
         """Return a formatted explanation of the generated plan."""
         if not self.generated_plan:
             return "No plan generated yet."
@@ -340,6 +408,11 @@ class Scheduler:
         total_duration = 0
         for i, task in enumerate(self.generated_plan, 1):
             explanation += f"{i}. {task.title} ({task.duration} min)\n"
+            if task_pet_map:
+                explanation += (
+                    f"   Pet: {task_pet_map.get(id(task), 'Unknown Pet')}\n"
+                )
+            explanation += f"   Scheduled: {task.time or 'No time set'}\n"
             explanation += f"   Priority: {task.priority}\n"
             total_duration += task.duration
 
@@ -353,9 +426,9 @@ class Scheduler:
 
     def get_plan_by_time(self) -> list[Task]:
         """Return the generated plan sorted chronologically by time."""
-        def sort_key(task: Task) -> int:
-            minutes = self._time_to_minutes(task.time)
-            return minutes if minutes is not None else 10_000
+        def sort_key(task: Task) -> tuple[int, int]:
+            parsed_key = self._time_sort_key(task.time)
+            return parsed_key if parsed_key is not None else (10_000_000, 10_000)
 
         return sorted(
             self.generated_plan,

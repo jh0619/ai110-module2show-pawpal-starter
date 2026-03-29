@@ -1,4 +1,5 @@
 from pawpal_system import Task, Pet, Scheduler, Owner
+from datetime import date
 import sys
 sys.path.insert(0, '/Users/jiahou/Desktop/AI110/ai110-module2show-pawpal-starter')
 
@@ -229,6 +230,75 @@ def test_sorting_handles_midnight_and_noon_edges_correctly():
         "Lunch",
         "Afternoon Play",
     ]
+
+
+def test_sorting_with_dates_orders_by_date_then_time():
+    """Date-time sorting should order earlier days before later days."""
+    scheduler = Scheduler(
+        tasks=[
+            Task("Tomorrow Walk", 20, "high", "exercise", time="2026-03-29 08:00 AM"),
+            Task("Today Lunch", 15, "high", "feeding", time="2026-03-28 12:00 PM"),
+            Task("Today Breakfast", 10, "high", "feeding", time="2026-03-28 08:00 AM"),
+        ]
+    )
+
+    scheduler.generate_plan(available_time=90, preferences=[])
+    sorted_plan = scheduler.get_plan_by_time()
+
+    assert [task.title for task in sorted_plan] == [
+        "Today Breakfast",
+        "Today Lunch",
+        "Tomorrow Walk",
+    ]
+
+
+def test_conflict_detection_does_not_flag_same_clock_time_on_different_dates():
+    """Date-aware conflicts should not flag tasks on different calendar days."""
+    scheduler = Scheduler(
+        tasks=[
+            Task("Saturday Feed", 10, "high", "feeding", time="2026-03-28 08:00 AM"),
+            Task("Sunday Feed", 10, "high", "feeding", time="2026-03-29 08:00 AM"),
+        ]
+    )
+
+    warnings = scheduler.detect_time_conflicts()
+
+    assert warnings == []
+
+
+def test_generate_plan_filters_tasks_by_selected_date():
+    """Planner should include only tasks scheduled for the selected date."""
+    scheduler = Scheduler(
+        tasks=[
+            Task("Today Feed", 10, "high", "feeding", time="2026-03-28 08:00 AM"),
+            Task("Tomorrow Walk", 20, "high", "exercise", time="2026-03-29 08:00 AM"),
+        ]
+    )
+
+    plan = scheduler.generate_plan(
+        available_time=60,
+        preferences=[],
+        plan_date=date(2026, 3, 28),
+    )
+
+    assert [task.title for task in plan] == ["Today Feed"]
+
+
+def test_generate_plan_without_date_keeps_all_pending_tasks():
+    """Planner should keep previous global behavior when no plan_date is provided."""
+    scheduler = Scheduler(
+        tasks=[
+            Task("Today Feed", 10, "high", "feeding", time="2026-03-28 08:00 AM"),
+            Task("Tomorrow Walk", 20, "high", "exercise", time="2026-03-29 08:00 AM"),
+        ]
+    )
+
+    plan = scheduler.generate_plan(
+        available_time=60,
+        preferences=[],
+    )
+
+    assert {task.title for task in plan} == {"Today Feed", "Tomorrow Walk"}
 
 
 def test_daily_recurrence_keeps_time_when_no_date_is_provided():
